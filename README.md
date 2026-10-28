@@ -43,5 +43,4 @@ src/
 
 ## Deploy
 
-Funciona en Vercel o Netlify sin configuración extra (`npm run build`, carpeta `dist`).
-`vercel.json` ya incluye la regla para que las rutas funcionen al recargar.
+
