@@ -42,13 +42,6 @@ const insurers = ["ANDINA", "CAPITAL", "PROTECCIÓN"];
 function Brand({ inverse = false }: { inverse?: boolean }) {
   return (
     <div className="flex items-center gap-2.5" aria-label="SEGO">
-      <span className="grid size-9 place-items-center rounded-[10px] bg-[#5447D8] shadow-[0_5px_16px_rgba(84,71,216,0.28)]">
-        <svg width="19" height="19" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-          <path d="M9 1.5L16 5.5V12.5L9 16.5L2 12.5V5.5L9 1.5Z" stroke="rgba(255,255,255,.42)" />
-          <path d="M6 9C6 7.343 7.343 6 9 6C10.657 6 12 7.343 12 9C12 10.657 10.657 12 9 12" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-          <circle cx="9" cy="9" r="1.5" fill="white" />
-        </svg>
-      </span>
       <span className={`font-["Manrope"] text-xl font-extrabold tracking-[-0.04em] ${inverse ? "text-white" : "text-[#272143]"}`}>
         SEGO
       </span>
@@ -218,10 +211,6 @@ export function Landing() {
           </div>
           <div className="relative mx-auto grid max-w-[1240px] items-center gap-16 px-5 sm:px-8 lg:grid-cols-[0.82fr_1.18fr] lg:gap-20">
             <motion.div initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, ease: "easeOut" }}>
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3.5 py-2 text-[11px] font-semibold tracking-[0.11em] text-white/65">
-                <Sparkles size={13} className="text-[#8C82FF]" />
-                INSURTECH PARA INTERMEDIARIOS
-              </div>
               <h1 className="max-w-[620px] font-['Manrope'] text-[42px] font-extrabold leading-[1.06] tracking-[-0.045em] text-white sm:text-[58px] lg:text-[66px]">
                 Más opciones.
                 <br />
@@ -241,11 +230,6 @@ export function Landing() {
                   Ver cómo funciona <ChevronRight size={16} />
                 </button>
               </div>
-              <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-xs text-white/45">
-                {["Sin tarjeta de crédito", "Datos de demostración", "Listo en minutos"].map((item) => (
-                  <span key={item} className="flex items-center gap-1.5"><Check size={13} className="text-[#8C82FF]" />{item}</span>
-                ))}
-              </div>
             </motion.div>
             <ProductPreview />
           </div>
@@ -253,7 +237,6 @@ export function Landing() {
 
         <section className="border-b border-[#272143]/8 bg-white">
           <div className="mx-auto flex max-w-[1240px] flex-col items-center justify-between gap-7 px-5 py-8 sm:px-8 md:flex-row">
-            <p className="text-center text-xs font-semibold uppercase tracking-[0.13em] text-[#6C687A] md:text-left">Una vista clara de múltiples aseguradoras</p>
             <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14">
               {insurers.map((name) => <span key={name} className="font-['Manrope'] text-xs font-extrabold tracking-[0.12em] text-[#272143]/38">{name}</span>)}
             </div>
