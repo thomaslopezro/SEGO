@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { Check, Minus, ArrowLeft, Link2, BarChart3, X, Copy, Eye, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { Layout } from './Layout';
-import { C, ASEGURADORAS, Aseguradora, getCurrentQuote } from './data';
+import { C, Aseguradora, getCurrentQuote, cotizarAseguradoras, linkCliente, registrarMetrica, CurrentQuote } from './data';
 
 type SortKey = 'precio' | 'deducible' | 'cobertura';
 
@@ -41,18 +41,23 @@ function QuoteCard({ a, selected, onToggle, featured }: { a: Aseguradora; select
       )}
 
       {/* Selection checkbox */}
-      <div style={{ position: 'absolute', top: 16, right: 16 }}>
-        <button onClick={onToggle} style={{
-          width: 22, height: 22, borderRadius: 6, border: `2px solid ${selected ? C.primary : C.border}`,
-          background: selected ? C.primary : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'all 0.15s',
+      <div style={{ position: 'absolute', top: 5, right: 5 }}>
+        <button onClick={onToggle} aria-label={selected ? 'Quitar de la comparación' : 'Seleccionar para comparar'} aria-pressed={selected} title="Seleccionar para comparar" style={{
+          width: 44, height: 44, background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          {selected && <Check size={12} color="white" strokeWidth={3} />}
+          <span style={{
+            width: 22, height: 22, borderRadius: 6, border: `2px solid ${selected ? C.primary : C.border}`,
+            background: selected ? C.primary : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.15s',
+          }}>
+            {selected && <Check size={12} color="white" strokeWidth={3} />}
+          </span>
         </button>
       </div>
 
       {/* Aseguradora */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, paddingTop: featured ? 12 : 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, paddingTop: featured ? 12 : 0, paddingRight: 30 }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: a.color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${a.color}22` }}>
           <span style={{ fontSize: 12, fontWeight: 800, color: a.color }}>{a.iniciales}</span>
         </div>
@@ -70,7 +75,7 @@ function QuoteCard({ a, selected, onToggle, featured }: { a: Aseguradora; select
           {a.precioStr}
         </div>
         <div style={{ fontSize: 12.5, color: C.textSec, marginTop: 4 }}>
-          / año · {Math.round(a.precio / 12).toLocaleString('es-CO')} /mes
+          / año · ${Math.round(a.precio / 12).toLocaleString('es-CO')} /mes
         </div>
       </div>
 
@@ -97,7 +102,7 @@ function QuoteCard({ a, selected, onToggle, featured }: { a: Aseguradora; select
       <button
         onClick={() => navigate(`/cotizaciones/${a.id}`)}
         style={{
-          width: '100%', padding: '11px', borderRadius: 10, cursor: 'pointer',
+          width: '100%', padding: '13px', borderRadius: 10, cursor: 'pointer',
           border: featured ? 'none' : `1.5px solid ${C.border}`,
           background: featured ? C.primary : 'white',
           color: featured ? 'white' : C.text,
@@ -136,10 +141,10 @@ function CompareModal({ aseguradoras, onClose }: { aseguradoras: Aseguradora[]; 
       <div style={{ background: 'white', borderRadius: 16, maxWidth: 700, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: C.text }}>Comparación de opciones</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSec }}><X size={20} /></button>
+          <button onClick={onClose} aria-label="Cerrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
         </div>
-        <div style={{ overflowY: 'auto', padding: '0 24px 24px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 20 }}>
+        <div style={{ overflow: 'auto', padding: '0 16px 24px' }}>
+          <table style={{ width: '100%', minWidth: 420, borderCollapse: 'collapse', marginTop: 20 }}>
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', padding: '10px 0', fontSize: 12, color: C.textSec, width: '35%' }}>Característica</th>
@@ -174,30 +179,56 @@ function CompareModal({ aseguradoras, onClose }: { aseguradoras: Aseguradora[]; 
 
 // ─── Link generation modal ────────────────────────────────────────────────────
 
-function LinkModal({ clientName, onClose, onPreview }: { clientName: string; onClose: () => void; onPreview: () => void }) {
-  const token = 'demo-' + Math.random().toString(36).slice(2, 8);
-  const link = `${window.location.origin}/cliente/${token}`;
-  const [copied, setCopied] = useState(false);
-  const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
+export async function copiarTexto(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Respaldo para navegadores sin API de portapapeles
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch { return false; }
+  }
+}
 
-  function handleCopy() {
-    navigator.clipboard.writeText(link).catch(() => {});
+function LinkModal({ quote, clientName, onClose, onPreview }: { quote: CurrentQuote; clientName: string; onClose: () => void; onPreview: (path: string) => void }) {
+  const link = useMemo(() => linkCliente(quote), [quote]);
+  const [copied, setCopied] = useState(false);
+  const [email, setEmail] = useState(quote.cliente?.email ?? '');
+  const [sent, setSent] = useState(false);
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
+  async function handleCopy() {
+    const ok = await copiarTexto(link);
+    if (!ok) { toast.error('No se pudo copiar. Mantén presionado el enlace para copiarlo.'); return; }
     setCopied(true);
+    toast.success('Enlace copiado. Pégalo en WhatsApp o en un correo para tu cliente.');
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleShare() {
+    navigator.share({ title: 'Tu cotización de seguro', text: `Hola ${clientName.split(' ')[0]}, estas son tus opciones de seguro:`, url: link }).catch(() => {});
   }
 
   function handleSend() {
     if (!email.trim()) return;
     setSent(true);
-    setTimeout(() => { toast.success(`Link enviado a ${email}`); setSent(false); setEmail(''); }, 800);
+    setTimeout(() => {
+      toast.info('Envío simulado: en esta versión de prueba no se envían correos. Usa "Copiar" y compártelo tú mismo.', { duration: 6000 });
+      setSent(false);
+    }, 600);
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: 'Inter, sans-serif' }} onClick={onClose}>
-      <div style={{ background: 'white', borderRadius: 18, maxWidth: 500, width: '100%', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={(e) => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, fontFamily: 'Inter, sans-serif' }} onClick={onClose}>
+      <div style={{ background: 'white', borderRadius: 18, maxWidth: 500, width: '100%', maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div style={{ background: 'linear-gradient(135deg, #272143, #5447D8)', padding: '24px 28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ background: 'linear-gradient(135deg, #272143, #5447D8)', padding: '20px 16px 20px 22px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -206,26 +237,26 @@ function LinkModal({ clientName, onClose, onPreview }: { clientName: string; onC
               <span style={{ color: 'white', fontSize: 16, fontWeight: 700, fontFamily: 'Manrope, sans-serif' }}>Link generado para el cliente</span>
             </div>
             <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, margin: 0 }}>
-              Comparte este link con {clientName.split(' ')[0]} para que vea las opciones, use el chat de IA y pague directamente.
+              Comparte este link con {clientName.split(' ')[0]} para que vea las opciones desde su celular, sin descargar nada.
             </p>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', marginLeft: 16, padding: 4, flexShrink: 0 }}><X size={18} /></button>
+          <button onClick={onClose} aria-label="Cerrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', marginLeft: 8, padding: 10, flexShrink: 0 }}><X size={18} /></button>
         </div>
 
-        <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           {/* Link display */}
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: C.textSec, display: 'block', marginBottom: 8, letterSpacing: '0.03em' }}>ENLACE PARA EL CLIENTE</label>
             <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{
-                flex: 1, padding: '10px 14px', borderRadius: 9, border: `1.5px solid ${C.border}`,
-                background: C.bg, fontSize: 13, color: C.text, fontFamily: 'monospace',
+              <a href={link} target="_blank" rel="noreferrer" style={{
+                flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 9, border: `1.5px solid ${C.border}`,
+                background: C.bg, fontSize: 13, color: C.text, fontFamily: 'monospace', textDecoration: 'none',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {link}
-              </div>
+              </a>
               <button onClick={handleCopy} style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 9,
+                display: 'flex', alignItems: 'center', gap: 6, padding: '12px 16px', borderRadius: 9,
                 border: `1.5px solid ${copied ? '#059669' : C.border}`,
                 background: copied ? '#ECFDF5' : 'white',
                 color: copied ? '#059669' : C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer',
@@ -237,20 +268,30 @@ function LinkModal({ clientName, onClose, onPreview }: { clientName: string; onC
             </div>
           </div>
 
+          {canShare && (
+            <button onClick={handleShare} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '12px', borderRadius: 10,
+              border: 'none', background: C.primary, color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+            }}>
+              <Send size={15} /> Compartir por WhatsApp, correo…
+            </button>
+          )}
+
           {/* Send by email */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: C.textSec, display: 'block', marginBottom: 8, letterSpacing: '0.03em' }}>O ENVÍALO DIRECTAMENTE</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: C.textSec, display: 'block', marginBottom: 8, letterSpacing: '0.03em' }}>O ENVÍALO POR CORREO (SIMULADO)</label>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
+                type="email" inputMode="email" autoCapitalize="none"
                 value={email} onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="Correo del cliente"
-                style={{ flex: 1, padding: '10px 13px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 13.5, color: C.text, outline: 'none', fontFamily: 'Inter, sans-serif', transition: 'border-color 0.15s' }}
+                style={{ flex: 1, minWidth: 0, padding: '12px 13px', borderRadius: 9, border: `1.5px solid ${C.border}`, fontSize: 16, color: C.text, outline: 'none', fontFamily: 'Inter, sans-serif', transition: 'border-color 0.15s' }}
                 onFocus={(e) => e.target.style.borderColor = C.primary}
                 onBlur={(e) => e.target.style.borderColor = C.border}
               />
               <button onClick={handleSend} disabled={sent || !email.trim()} style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 9,
+                display: 'flex', alignItems: 'center', gap: 6, padding: '12px 16px', borderRadius: 9,
                 border: 'none', background: sent || !email.trim() ? C.border : C.primary,
                 color: 'white', fontSize: 13, fontWeight: 600, cursor: sent || !email.trim() ? 'not-allowed' : 'pointer',
                 whiteSpace: 'nowrap', transition: 'background 0.15s',
@@ -266,8 +307,8 @@ function LinkModal({ clientName, onClose, onPreview }: { clientName: string; onC
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {[
                 'Las 3 cotizaciones con precios y coberturas en lenguaje simple',
-                'Chat de IA para resolver dudas sobre su cotización',
-                'Botón "Pagar mi seguro" que lo lleva al portal de cada aseguradora',
+                'Chat con respuestas automáticas para resolver dudas frecuentes',
+                'Botón "Elegir este seguro" (en la versión de prueba no hay pago real)',
               ].map((item) => (
                 <div key={item} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                   <Check size={13} color={C.primary} style={{ marginTop: 2, flexShrink: 0 }} strokeWidth={2.5} />
@@ -279,7 +320,7 @@ function LinkModal({ clientName, onClose, onPreview }: { clientName: string; onC
 
           {/* Preview button */}
           <button
-            onClick={() => { onClose(); onPreview(); }}
+            onClick={() => { onClose(); onPreview(new URL(link).pathname); }}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               padding: '12px', borderRadius: 10, border: `1.5px solid ${C.border}`,
@@ -299,22 +340,29 @@ function LinkModal({ clientName, onClose, onPreview }: { clientName: string; onC
 
 export function Resultados() {
   const navigate = useNavigate();
-  const quoteData = getCurrentQuote();
-  const clientName = quoteData.cliente?.nombre || 'Laura';
-  const vehicleStr = quoteData.vehiculo ? `${quoteData.vehiculo.marca} ${quoteData.vehiculo.linea} ${quoteData.vehiculo.anio} · ${quoteData.vehiculo.ciudad}` : 'Mazda CX-30 Grand Touring 2024 · Bogotá';
+  const location = useLocation();
+  const [quoteData] = useState(() => getCurrentQuote());
+  const clientName = quoteData.cliente?.nombre || 'Laura Gómez (ejemplo)';
+  const vehicleStr = quoteData.vehiculo ? `${quoteData.vehiculo.marca} ${quoteData.vehiculo.linea} ${quoteData.vehiculo.anio} · ${quoteData.vehiculo.ciudad} · Valor ${quoteData.vehiculo.valor}` : 'Mazda CX-30 Grand Touring 2024 · Bogotá (ejemplo)';
+  const aseguradoras = useMemo(() => cotizarAseguradoras(quoteData.vehiculo, quoteData.precios), [quoteData]);
+  const preselect = (location.state as { select?: string } | null)?.select;
 
   const [sortKey, setSortKey] = useState<SortKey>('precio');
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(preselect ? [preselect] : []));
   const [showCompare, setShowCompare] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
 
+  // Métrica: primera vez que se ven los resultados de esta cotización
+  useEffect(() => { registrarMetrica(quoteData.id, 'resultados'); }, [quoteData.id]);
+
   const sorted = useMemo(() => {
-    const arr = [...ASEGURADORAS];
+    const arr = [...aseguradoras];
     if (sortKey === 'precio') arr.sort((a, b) => a.precio - b.precio);
     else if (sortKey === 'cobertura') arr.sort((a, b) => Object.values(b.coberturas).filter(Boolean).length - Object.values(a.coberturas).filter(Boolean).length);
-    else if (sortKey === 'deducible') arr.sort((a, b) => a.precio - b.precio);
+    // Deducible: menor porcentaje primero; a igual porcentaje, menor mínimo en pesos
+    else if (sortKey === 'deducible') arr.sort((a, b) => a.deduciblePct - b.deduciblePct || a.deducibleMin - b.deducibleMin);
     return arr;
-  }, [sortKey]);
+  }, [sortKey, aseguradoras]);
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -324,7 +372,7 @@ export function Resultados() {
     });
   }
 
-  const compareItems = ASEGURADORAS.filter((a) => selected.has(a.id));
+  const compareItems = aseguradoras.filter((a) => selected.has(a.id));
 
   return (
     <Layout breadcrumb={['Cotizaciones', 'Resultados']}>
@@ -333,30 +381,31 @@ export function Resultados() {
       )}
       {showLinkModal && (
         <LinkModal
+          quote={quoteData}
           clientName={clientName}
           onClose={() => setShowLinkModal(false)}
-          onPreview={() => navigate('/cliente/demo')}
+          onPreview={(path) => navigate(path)}
         />
       )}
 
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
-        <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, fontSize: 13, marginBottom: 16, padding: 0 }}>
-          <ArrowLeft size={15} /> Volver
+        <button onClick={() => navigate('/cotizaciones')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, fontSize: 13, marginBottom: 8, padding: '10px 0' }}>
+          <ArrowLeft size={15} /> Volver a cotizaciones
         </button>
         <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-0.02em', fontFamily: 'Manrope, sans-serif' }}>
-          Encontramos {ASEGURADORAS.length} opciones para {clientName}
+          Encontramos {aseguradoras.length} opciones para {clientName}
         </h1>
         <p style={{ color: C.textSec, fontSize: 14, marginTop: 6 }}>{vehicleStr}</p>
       </div>
 
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: C.textSec, fontWeight: 500 }}>Ordenar por:</span>
           {(['precio', 'cobertura', 'deducible'] as SortKey[]).map((k) => (
             <button key={k} onClick={() => setSortKey(k)} style={{
-              padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${sortKey === k ? C.primary : C.border}`,
+              padding: '10px 14px', borderRadius: 20, border: `1.5px solid ${sortKey === k ? C.primary : C.border}`,
               background: sortKey === k ? C.primaryLight : 'white', color: sortKey === k ? C.primary : C.textSec,
               fontSize: 13, fontWeight: sortKey === k ? 600 : 400, cursor: 'pointer', transition: 'all 0.15s',
               fontFamily: 'Inter, sans-serif', textTransform: 'capitalize',
@@ -366,10 +415,10 @@ export function Resultados() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {selected.size >= 2 && (
             <button onClick={() => setShowCompare(true)} style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 9,
+              display: 'flex', alignItems: 'center', gap: 6, padding: '12px 16px', borderRadius: 9,
               border: `1.5px solid ${C.primary}`, background: C.primaryLight, color: C.primary,
               fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}>
@@ -379,7 +428,7 @@ export function Resultados() {
           <button
             onClick={() => setShowLinkModal(true)}
             style={{
-              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 20px', borderRadius: 9,
+              display: 'flex', alignItems: 'center', gap: 7, padding: '12px 20px', borderRadius: 9,
               border: 'none', background: C.primary, color: 'white',
               fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
               boxShadow: '0 2px 8px rgba(84,71,216,0.3)',
@@ -404,7 +453,11 @@ export function Resultados() {
       </div>
 
       <div style={{ marginTop: 20, padding: '12px 18px', background: C.bg, borderRadius: 10, border: `1px solid ${C.border}` }}>
+        {selected.size === 1 && (
+          <p style={{ fontSize: 12.5, color: C.primary, margin: '0 0 8px' }}>Selecciona otra opción (casilla arriba a la derecha) para compararlas lado a lado.</p>
+        )}
         <p style={{ fontSize: 12, color: C.textSec, margin: 0 }}>
+          <strong style={{ color: C.text }}>Precios simulados:</strong> calculados con una fórmula de demostración a partir del valor comercial, uso, siniestros y antigüedad del vehículo.{' '}
           <strong style={{ color: C.text }}>Aviso:</strong> Los badges y clasificaciones son indicativos para facilitar la comparación. No constituyen recomendaciones financieras. Las condiciones definitivas deben verificarse en los documentos de cada aseguradora.
         </p>
       </div>

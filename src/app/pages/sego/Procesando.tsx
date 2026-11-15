@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Check, X, Wifi } from 'lucide-react';
 import { C, ASEGURADORAS } from './data';
+import { DemoBanner } from './DemoBanner';
 import { SegoLogo } from './Layout';
 
 type AsegStatus = 'waiting' | 'loading' | 'done' | 'error';
@@ -51,7 +52,7 @@ export function Procesando() {
     }, 3600));
 
     timers.push(setTimeout(() => {
-      navigate('/cotizaciones/resultados');
+      navigate('/cotizaciones/resultados', { replace: true });
     }, 4600));
 
     return () => {
@@ -68,10 +69,11 @@ export function Procesando() {
       alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif',
       padding: 24,
     }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0 }}><DemoBanner /></div>
       {/* Logo */}
-      <div style={{ position: 'absolute', top: 28, left: 32 }}><SegoLogo /></div>
+      <div className="sego-proc-logo" style={{ position: 'absolute', top: 52, left: 32 }}><SegoLogo /></div>
 
-      <div style={{ width: '100%', maxWidth: 560 }}>
+      <div style={{ width: '100%', maxWidth: 560, paddingTop: 72 }}>
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <div style={{
@@ -91,6 +93,7 @@ export function Procesando() {
           <p style={{ color: C.textSec, fontSize: 14.5, marginTop: 10 }}>
             {MESSAGES[msgIdx]}
           </p>
+          <p style={{ color: C.textSec, fontSize: 12, marginTop: 6 }}>Consulta simulada (versión de prueba)</p>
         </div>
 
         {/* Progress bar */}
@@ -176,6 +179,7 @@ export function Procesando() {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.6; transform: scale(0.92); }
         }
+        @media (max-width: 640px) { .sego-proc-logo { left: 16px !important; } }
         @keyframes sego-dot-pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.4; transform: scale(0.7); }

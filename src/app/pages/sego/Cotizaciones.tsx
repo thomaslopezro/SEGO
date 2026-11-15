@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { Search, ExternalLink, Copy, Download, Filter, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Layout } from './Layout';
-import { C, getQuotes, saveQuoteToStore, Cotizacion, genId } from './data';
+import { C, getQuotes, saveQuoteToStore, Cotizacion, genId, cargarCotizacion, fechaCorta } from './data';
 
 function StatusBadge({ estado }: { estado: string }) {
   const done = estado === 'completada';
@@ -40,14 +40,22 @@ export function Cotizaciones() {
   }, [quotes, search, filterEstado]);
 
   function handleDuplicate(q: Cotizacion) {
-    const newQ: Cotizacion = { ...q, id: genId(), fecha: 'Hoy', estado: 'borrador' };
+    const newQ: Cotizacion = { ...q, id: genId(), fecha: fechaCorta(), estado: 'borrador' };
     saveQuoteToStore(newQ);
     setQuotes(getQuotes());
     toast.success('Cotización duplicada. Puedes editarla como nuevo borrador.');
   }
 
+  function handleOpen(q: Cotizacion) {
+    if (q.estado === 'borrador') { navigate('/cotizaciones/nueva', { state: { draft: q } }); return; }
+    cargarCotizacion(q);
+    navigate('/cotizaciones/resultados');
+  }
+
   function handleDownload(q: Cotizacion) {
-    toast.success(`Descargando cotización de ${q.cliente.nombre}…`);
+    if (q.estado === 'borrador') { toast.info('Completa el borrador para generar el documento.'); handleOpen(q); return; }
+    cargarCotizacion(q);
+    navigate('/cotizaciones/documento');
   }
 
   const avatarColors = [C.primaryLight, '#ECFDF5', '#FFFBEB', '#F5F3FF', '#FEF2F2'];
@@ -67,7 +75,7 @@ export function Cotizaciones() {
         </div>
         <button
           onClick={() => navigate('/cotizaciones/nueva')}
-          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 9, border: 'none', background: C.primary, color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif', boxShadow: '0 2px 8px rgba(84,71,216,0.3)' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '12px 20px', borderRadius: 9, border: 'none', background: C.primary, color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif', boxShadow: '0 2px 8px rgba(84,71,216,0.3)' }}
         >
           <Plus size={16} /> Nueva cotización
         </button>
@@ -75,14 +83,15 @@ export function Cotizaciones() {
 
       {/* Search + filters */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 240, position: 'relative' }}>
+        <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
           <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: C.textSec }} />
           <input
             value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por cliente, placa o vehículo…"
+            type="search"
             style={{
-              width: '100%', padding: '10px 13px 10px 36px', borderRadius: 9,
-              border: `1.5px solid ${C.border}`, background: 'white', fontSize: 14,
+              width: '100%', padding: '12px 13px 12px 36px', borderRadius: 9,
+              border: `1.5px solid ${C.border}`, background: 'white', fontSize: 16,
               color: C.text, outline: 'none', fontFamily: 'Inter, sans-serif',
               boxSizing: 'border-box', transition: 'border-color 0.15s',
             }}
@@ -95,7 +104,7 @@ export function Cotizaciones() {
           <Filter size={15} color={C.textSec} />
           <select
             value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}
-            style={{ padding: '10px 13px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: 'white', fontSize: 14, color: C.text, outline: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
+            style={{ padding: '12px 13px', borderRadius: 9, border: `1.5px solid ${C.border}`, background: 'white', fontSize: 15, color: C.text, outline: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
           >
             <option value="todos">Todos los estados</option>
             <option value="completada">Completadas</option>
@@ -164,9 +173,11 @@ export function Cotizaciones() {
                     <td style={{ padding: '14px 18px' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button
-                          onClick={() => navigate('/cotizaciones/resultados')}
-                          title="Ver cotización"
-                          style={{ padding: '7px', borderRadius: 7, border: `1.5px solid ${C.border}`, background: 'white', color: C.textSec, cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
+                          onClick={() => handleOpen(q)}
+                          title={q.estado === 'borrador' ? 'Continuar borrador' : 'Ver cotización'}
+                          aria-label={q.estado === 'borrador' ? 'Continuar borrador' : 'Ver cotización'}
+                          className="sego-icon-btn"
+                          style={{ padding: '8px', borderRadius: 7, border: `1.5px solid ${C.border}`, background: 'white', color: C.textSec, cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
                           onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; }}
                           onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSec; }}
                         >
@@ -175,7 +186,9 @@ export function Cotizaciones() {
                         <button
                           onClick={() => handleDuplicate(q)}
                           title="Duplicar"
-                          style={{ padding: '7px', borderRadius: 7, border: `1.5px solid ${C.border}`, background: 'white', color: C.textSec, cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
+                          aria-label="Duplicar"
+                          className="sego-icon-btn"
+                          style={{ padding: '8px', borderRadius: 7, border: `1.5px solid ${C.border}`, background: 'white', color: C.textSec, cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
                           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#059669'; e.currentTarget.style.color = '#059669'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSec; }}
                         >
@@ -183,8 +196,10 @@ export function Cotizaciones() {
                         </button>
                         <button
                           onClick={() => handleDownload(q)}
-                          title="Descargar"
-                          style={{ padding: '7px', borderRadius: 7, border: `1.5px solid ${C.border}`, background: 'white', color: C.textSec, cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
+                          title="Descargar documento"
+                          aria-label="Descargar documento"
+                          className="sego-icon-btn"
+                          style={{ padding: '8px', borderRadius: 7, border: `1.5px solid ${C.border}`, background: 'white', color: C.textSec, cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.15s' }}
                           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#D97706'; e.currentTarget.style.color = '#D97706'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.textSec; }}
                         >

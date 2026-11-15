@@ -1,0 +1,123 @@
+/* Ajustes globales de SEGO: uso en celular e impresión del documento. */
+
+/* ── Celular ─────────────────────────────────────────────── */
+@media screen and (max-width: 640px) {
+  /* 16px evita el zoom automático de iOS al enfocar un campo */
+  .sego-form input,
+  .sego-form select,
+  .sego-form textarea {
+    font-size: 16px !important;
+    min-height: 46px;
+  }
+  .sego-touch,
+  .sego-form button {
+    min-height: 44px;
+  }
+  .sego-grid-2,
+  .sego-grid-3 {
+    grid-template-columns: 1fr !important;
+  }
+  .sego-card-pad {
+    padding: 20px 16px !important;
+  }
+  .sego-step-label {
+    display: none;
+  }
+  .sego-step-label.is-active {
+    display: inline;
+  }
+  .sego-actions {
+    flex-direction: column-reverse;
+    align-items: stretch !important;
+  }
+  .sego-actions > div {
+    width: 100%;
+  }
+  .sego-actions > div > button {
+    flex: 1;
+    justify-content: center;
+  }
+  .sego-icon-btn {
+    padding: 11px !important;
+  }
+  .sego-doc-head {
+    padding: 22px 18px !important;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .sego-doc-body {
+    padding: 22px 16px !important;
+  }
+}
+
+@media screen and (max-width: 900px) {
+  .sego-detail-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .sego-detail-aside {
+    position: static !important;
+  }
+}
+
+/* ── Impresión: documento consolidado en hoja carta ──────── */
+@page {
+  size: letter;
+  margin: 10mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  #sego-sidebar,
+  #sego-topbar,
+  .sego-banner,
+  .no-print,
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  #sego-main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .sego-shell {
+    display: block !important;
+    min-height: 0 !important;
+    background: #fff !important;
+  }
+  .sego-print-doc {
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    font-size: 11px;
+    break-inside: avoid;
+  }
+  .sego-print-doc .sego-doc-head {
+    padding: 14px 20px !important;
+  }
+  .sego-print-doc .sego-doc-body {
+    padding: 14px 4px 0 !important;
+  }
+  .sego-print-doc table th,
+  .sego-print-doc table td {
+    padding: 7px 8px !important;
+  }
+  .sego-print-doc h3 {
+    margin-bottom: 8px !important;
+  }
+  .sego-print-doc .sego-grid-3 {
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+  }
+  .sego-print-doc .sego-grid-3 > div {
+    padding: 10px !important;
+  }
+  .sego-print-doc .sego-doc-section {
+    margin-bottom: 16px !important;
+  }
+}

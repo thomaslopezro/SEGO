@@ -2,20 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, TrendingUp, Clock, Shield, Users, ArrowRight, ChevronRight, ExternalLink } from 'lucide-react';
 import { Layout } from './Layout';
-import { C, getQuotes, Cotizacion } from './data';
+import { C, getQuotes, Cotizacion, cargarCotizacion, getMetricas } from './data';
 
-const STAT_CARDS = [
-  { label: 'Cotizaciones este mes', value: '24', icon: <TrendingUp size={20} />, color: C.primary, bg: C.primaryLight, change: '+3 vs. mes anterior' },
-  { label: 'Tiempo promedio', value: '12 min', icon: <Clock size={20} />, color: '#059669', bg: '#ECFDF5', change: '−18 min vs. proceso manual' },
-  { label: 'Aseguradoras conectadas', value: '3', icon: <Shield size={20} />, color: '#D97706', bg: '#FFFBEB', change: 'Andina · Capital · Protección' },
-  { label: 'Clientes atendidos', value: '18', icon: <Users size={20} />, color: '#7C3AED', bg: '#F5F3FF', change: '+5 este mes' },
-];
+interface StatCardData { label: string; value: string; icon: React.ReactNode; color: string; bg: string; change: string }
 
-function StatCard({ card }: { card: typeof STAT_CARDS[0] }) {
+function buildStats(quotes: Cotizacion[]): StatCardData[] {
+  const mias = quotes.filter((q) => !['q-001', 'q-002', 'q-003'].includes(q.id));
+  const clientes = new Set(mias.map((q) => q.cliente.nombre.trim().toLowerCase())).size;
+  const tiempos = Object.values(getMetricas())
+    .filter((m) => m.documento && m.inicio)
+    .map((m) => (m.documento! - m.inicio) / 60000);
+  const prom = tiempos.length ? `${Math.max(1, Math.round(tiempos.reduce((a, b) => a + b, 0) / tiempos.length))} min` : '—';
+  return [
+    { label: 'Cotizaciones creadas', value: String(mias.length), icon: <TrendingUp size={20} />, color: C.primary, bg: C.primaryLight, change: 'En este navegador (sin contar ejemplos)' },
+    { label: 'Tiempo promedio', value: prom, icon: <Clock size={20} />, color: '#059669', bg: '#ECFDF5', change: 'Desde "Nueva cotización" hasta el documento' },
+    { label: 'Aseguradoras (simuladas)', value: '3', icon: <Shield size={20} />, color: '#D97706', bg: '#FFFBEB', change: 'Andina · Capital · Protección (ficticias)' },
+    { label: 'Clientes atendidos', value: String(clientes), icon: <Users size={20} />, color: '#7C3AED', bg: '#F5F3FF', change: 'Clientes distintos cotizados' },
+  ];
+}
+
+function StatCard({ card }: { card: StatCardData }) {
   return (
     <div style={{
       background: C.white, borderRadius: 14, padding: '22px 24px',
-      border: `1px solid ${C.border}`, flex: 1, minWidth: 0,
+      border: `1px solid ${C.border}`, flex: '1 1 220px', minWidth: 0,
       boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       transition: 'box-shadow 0.2s, transform 0.2s',
     }}
@@ -54,10 +64,19 @@ function StatusBadge({ estado }: { estado: string }) {
 export function Dashboard() {
   const navigate = useNavigate();
   const [quotes, setQuotes] = useState<Cotizacion[]>([]);
+  const [stats, setStats] = useState<StatCardData[]>([]);
 
   useEffect(() => {
-    setQuotes(getQuotes().slice(0, 5));
+    const all = getQuotes();
+    setQuotes(all.slice(0, 5));
+    setStats(buildStats(all));
   }, []);
+
+  function abrir(q: Cotizacion) {
+    if (q.estado === 'borrador') { navigate('/cotizaciones/nueva', { state: { draft: q } }); return; }
+    cargarCotizacion(q);
+    navigate('/cotizaciones/resultados');
+  }
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Buenos días' : hour < 18 ? 'Buenas tardes' : 'Buenas noches';
@@ -75,7 +94,7 @@ export function Dashboard() {
         <button
           onClick={() => navigate('/cotizaciones/nueva')}
           style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '11px 22px',
+            display: 'flex', alignItems: 'center', gap: 8, padding: '13px 22px',
             background: C.primary, color: 'white', border: 'none', borderRadius: 10,
             fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
             boxShadow: '0 2px 8px rgba(84,71,216,0.35)', transition: 'all 0.15s',
@@ -90,7 +109,7 @@ export function Dashboard() {
 
       {/* Stat cards */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 32, flexWrap: 'wrap' }}>
-        {STAT_CARDS.map((card) => <StatCard key={card.label} card={card} />)}
+        {stats.map((card) => <StatCard key={card.label} card={card} />)}
       </div>
 
       {/* Recent quotes */}
@@ -99,7 +118,7 @@ export function Dashboard() {
           <h2 style={{ fontSize: 16, fontWeight: 600, color: C.text, margin: 0 }}>Cotizaciones recientes</h2>
           <button
             onClick={() => navigate('/cotizaciones')}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: C.primary, fontSize: 13, fontWeight: 500 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: C.primary, fontSize: 13, fontWeight: 500, padding: '10px 0' }}
           >
             Ver todas <ChevronRight size={14} />
           </button>
@@ -146,17 +165,17 @@ export function Dashboard() {
                   <td style={{ padding: '14px 20px' }}><StatusBadge estado={q.estado} /></td>
                   <td style={{ padding: '14px 20px' }}>
                     <button
-                      onClick={() => navigate('/cotizaciones/resultados')}
+                      onClick={() => abrir(q)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 5,
-                        padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${C.border}`,
+                        padding: '10px 14px', borderRadius: 8, border: `1.5px solid ${C.border}`,
                         background: 'white', color: C.text, fontSize: 12.5, fontWeight: 500,
                         cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
                       }}
                       onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; }}
                       onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text; }}
                     >
-                      Ver cotización <ExternalLink size={12} />
+                      {q.estado === 'borrador' ? 'Continuar' : 'Ver cotización'} <ExternalLink size={12} />
                     </button>
                   </td>
                 </tr>

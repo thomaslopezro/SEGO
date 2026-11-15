@@ -48,6 +48,11 @@ export interface Aseguradora {
   precio: number;
   precioStr: string;
   deducible: string;
+  /** Deducible: porcentaje del daño y mínimo en pesos (para ordenar). */
+  deduciblePct: number;
+  deducibleMin: number;
+  /** Tasa anual de demostración sobre el valor comercial. */
+  tasa: number;
   badge: string;
   badgeColor: string;
   badgeBg: string;
@@ -71,6 +76,8 @@ export interface Cotizacion {
   fecha: string;
   estado: 'completada' | 'borrador';
   mejorOferta: string;
+  /** Prima anual calculada por aseguradora (id → pesos). */
+  precios?: Record<string, number>;
 }
 
 export const ASEGURADORAS: Aseguradora[] = [
@@ -82,6 +89,9 @@ export const ASEGURADORAS: Aseguradora[] = [
     precio: 2480000,
     precioStr: '$2.480.000',
     deducible: '10% mínimo $1.200.000',
+    deduciblePct: 10,
+    deducibleMin: 1200000,
+    tasa: 0.034,
     badge: 'Mejor relación cobertura/precio',
     badgeColor: '#5447D8',
     badgeBg: '#EEF0FD',
@@ -99,6 +109,9 @@ export const ASEGURADORAS: Aseguradora[] = [
     precio: 2150000,
     precioStr: '$2.150.000',
     deducible: '15% mínimo $1.500.000',
+    deduciblePct: 15,
+    deducibleMin: 1500000,
+    tasa: 0.028,
     badge: 'Menor precio',
     badgeColor: '#059669',
     badgeBg: '#ECFDF5',
@@ -115,6 +128,9 @@ export const ASEGURADORAS: Aseguradora[] = [
     precio: 2790000,
     precioStr: '$2.790.000',
     deducible: '10% mínimo $1.000.000',
+    deduciblePct: 10,
+    deducibleMin: 1000000,
+    tasa: 0.042,
     badge: 'Mayor cobertura',
     badgeColor: '#D97706',
     badgeBg: '#FFFBEB',
@@ -147,49 +163,82 @@ export const VEHICULO_DEMO: VehiculoData = {
   siniestros: false,
 };
 
+// ─── Precios (fórmula de demostración) ──────────────────────────────────────
+
+/** Extrae el número de un texto como "$105.000.000 COP". Devuelve NaN si no hay dígitos. */
+export function parseValor(valor: string): number {
+  const digits = (valor ?? '').replace(/\D/g, '');
+  return digits ? Number(digits) : NaN;
+}
+
+export function formatCOP(n: number) {
+  return '$' + Math.round(n).toLocaleString('es-CO');
+}
+
+/**
+ * Prima anual de demostración: valor comercial × tasa de la aseguradora,
+ * +15% uso comercial, +20% si tuvo siniestros, +10% si el modelo tiene más de 10 años.
+ * Redondeada a miles de pesos.
+ */
+export function calcularPrima(aseg: Aseguradora, vehiculo: VehiculoData): number {
+  const valor = parseValor(vehiculo.valor);
+  if (!Number.isFinite(valor) || valor <= 0) return 0;
+  let prima = valor * aseg.tasa;
+  if (vehiculo.uso === 'comercial') prima *= 1.15;
+  if (vehiculo.siniestros) prima *= 1.2;
+  const anio = Number(vehiculo.anio);
+  if (Number.isFinite(anio) && anio > 0 && new Date().getFullYear() - anio > 10) prima *= 1.1;
+  return Math.round(prima / 1000) * 1000;
+}
+
+/** Aseguradoras con el precio calculado para este vehículo (o con los precios ya guardados). */
+export function cotizarAseguradoras(vehiculo?: VehiculoData, precios?: Record<string, number>): Aseguradora[] {
+  const v = vehiculo ?? VEHICULO_DEMO;
+  return ASEGURADORAS.map((a) => {
+    const precio = precios?.[a.id] ?? calcularPrima(a, v);
+    return { ...a, precio, precioStr: formatCOP(precio) };
+  });
+}
+
+export function preciosDe(vehiculo: VehiculoData): Record<string, number> {
+  return Object.fromEntries(cotizarAseguradoras(vehiculo).map((a) => [a.id, a.precio]));
+}
+
+export function mejorOfertaDe(precios: Record<string, number>) {
+  return formatCOP(Math.min(...Object.values(precios))) + '/año';
+}
+
+export function fechaCorta(d = new Date()) {
+  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function demoQuote(id: string, cliente: ClienteData, vehiculo: VehiculoData): Cotizacion {
+  const precios = preciosDe(vehiculo);
+  return { id, cliente, vehiculo, fecha: 'Ejemplo', estado: 'completada', precios, mejorOferta: mejorOfertaDe(precios) };
+}
+
 const INITIAL_QUOTES: Cotizacion[] = [
-  {
-    id: 'q-001',
-    cliente: CLIENTE_DEMO,
-    vehiculo: VEHICULO_DEMO,
-    fecha: 'Hoy',
-    estado: 'completada',
-    mejorOferta: '$2.480.000/año',
-  },
-  {
-    id: 'q-002',
-    cliente: {
-      nombre: 'Carlos Rodríguez', tipoDoc: 'CC', numDoc: '79.456.123',
-      fechaNacimiento: '20/03/1985', email: 'carlos.rodriguez@email.com',
-      telefono: '310 444 0267', ciudad: 'Bogotá D.C.',
-    },
-    vehiculo: {
-      placa: 'DEF456', marca: 'Toyota', linea: 'Corolla Cross', modelo: 'XEI',
-      anio: '2023', valor: '$92.000.000 COP', ciudad: 'Bogotá', uso: 'particular', siniestros: false,
-    },
-    fecha: 'Ayer',
-    estado: 'completada',
-    mejorOferta: '$2.150.000/año',
-  },
-  {
-    id: 'q-003',
-    cliente: {
-      nombre: 'Andrés Martínez', tipoDoc: 'CC', numDoc: '1.098.765.432',
-      fechaNacimiento: '08/11/1990', email: 'andres.martinez@email.com',
-      telefono: '320 333 0156', ciudad: 'Medellín',
-    },
-    vehiculo: {
-      placa: 'GHI789', marca: 'Renault', linea: 'Duster', modelo: 'Intens',
-      anio: '2022', valor: '$68.000.000 COP', ciudad: 'Medellín', uso: 'particular', siniestros: false,
-    },
-    fecha: '22 Sep',
-    estado: 'completada',
-    mejorOferta: '$1.890.000/año',
-  },
+  demoQuote('q-001', CLIENTE_DEMO, VEHICULO_DEMO),
+  demoQuote('q-002', {
+    nombre: 'Carlos Rodríguez', tipoDoc: 'CC', numDoc: '79456123',
+    fechaNacimiento: '20/03/1985', email: 'carlos.rodriguez@email.com',
+    telefono: '3104440267', ciudad: 'Bogotá D.C.',
+  }, {
+    placa: 'DEF456', marca: 'Toyota', linea: 'Corolla Cross', modelo: 'XEI',
+    anio: '2023', valor: '$92.000.000', ciudad: 'Bogotá', uso: 'particular', siniestros: false,
+  }),
+  demoQuote('q-003', {
+    nombre: 'Andrés Martínez', tipoDoc: 'CC', numDoc: '1098765432',
+    fechaNacimiento: '08/11/1990', email: 'andres.martinez@email.com',
+    telefono: '3203330156', ciudad: 'Medellín',
+  }, {
+    placa: 'GHI789', marca: 'Renault', linea: 'Duster', modelo: 'Intens',
+    anio: '2013', valor: '$38.000.000', ciudad: 'Medellín', uso: 'comercial', siniestros: true,
+  }),
 ];
 
-const QUOTES_KEY = 'sego_quotes_v3';
-const CURRENT_QUOTE_KEY = 'sego_current_quote_v3';
+const QUOTES_KEY = 'sego_quotes_v4';
+const CURRENT_QUOTE_KEY = 'sego_current_quote_v4';
 
 export function getQuotes(): Cotizacion[] {
   try {
@@ -207,10 +256,17 @@ export function saveQuoteToStore(quote: Cotizacion) {
   const idx = quotes.findIndex((q) => q.id === quote.id);
   if (idx >= 0) quotes[idx] = quote;
   else quotes.unshift(quote);
-  localStorage.setItem(QUOTES_KEY, JSON.stringify(quotes));
+  try { localStorage.setItem(QUOTES_KEY, JSON.stringify(quotes)); } catch { /* almacenamiento no disponible */ }
 }
 
-export function getCurrentQuote(): { cliente?: ClienteData; vehiculo?: VehiculoData } {
+export interface CurrentQuote {
+  id?: string;
+  cliente?: ClienteData;
+  vehiculo?: VehiculoData;
+  precios?: Record<string, number>;
+}
+
+export function getCurrentQuote(): CurrentQuote {
   try {
     const stored = sessionStorage.getItem(CURRENT_QUOTE_KEY);
     return stored ? JSON.parse(stored) : {};
@@ -219,12 +275,17 @@ export function getCurrentQuote(): { cliente?: ClienteData; vehiculo?: VehiculoD
   }
 }
 
-export function setCurrentQuote(data: { cliente?: ClienteData; vehiculo?: VehiculoData }) {
-  sessionStorage.setItem(CURRENT_QUOTE_KEY, JSON.stringify(data));
+export function setCurrentQuote(data: CurrentQuote) {
+  try { sessionStorage.setItem(CURRENT_QUOTE_KEY, JSON.stringify(data)); } catch { /* noop */ }
 }
 
 export function clearCurrentQuote() {
-  sessionStorage.removeItem(CURRENT_QUOTE_KEY);
+  try { sessionStorage.removeItem(CURRENT_QUOTE_KEY); } catch { /* noop */ }
+}
+
+/** Abre una cotización del historial: la deja como cotización actual. */
+export function cargarCotizacion(q: Cotizacion) {
+  setCurrentQuote({ id: q.id, cliente: q.cliente, vehiculo: q.vehiculo, precios: q.precios ?? preciosDe(q.vehiculo) });
 }
 
 export function genId() {
@@ -233,4 +294,89 @@ export function genId() {
 
 export function formatPrecioMensual(anual: number) {
   return '$' + Math.round(anual / 12).toLocaleString('es-CO');
+}
+
+// ─── Link para el cliente ───────────────────────────────────────────────────
+// No hay backend: el token lleva los datos mínimos (nombre de pila, vehículo y
+// precios) para que el cliente vea su cotización desde su propio celular.
+
+export interface ClienteTokenData {
+  n: string;
+  v: Pick<VehiculoData, 'marca' | 'linea' | 'modelo' | 'anio' | 'ciudad'>;
+  p: Record<string, number>;
+}
+
+export function crearTokenCliente(q: CurrentQuote): string {
+  const v = q.vehiculo ?? VEHICULO_DEMO;
+  const data: ClienteTokenData = {
+    n: (q.cliente?.nombre ?? CLIENTE_DEMO.nombre).trim().split(/\s+/)[0],
+    v: { marca: v.marca, linea: v.linea, modelo: v.modelo, anio: v.anio, ciudad: v.ciudad },
+    p: q.precios ?? preciosDe(v),
+  };
+  const bytes = new TextEncoder().encode(JSON.stringify(data));
+  let bin = '';
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+export function leerTokenCliente(token?: string): ClienteTokenData | null {
+  if (!token) return null;
+  try {
+    const b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    const data = JSON.parse(new TextDecoder().decode(bytes));
+    if (data && typeof data.n === 'string' && data.v && data.p) return data as ClienteTokenData;
+  } catch { /* token inválido */ }
+  return null;
+}
+
+export function linkCliente(q: CurrentQuote) {
+  return `${window.location.origin}/cliente/${crearTokenCliente(q)}`;
+}
+
+// ─── Métricas para pruebas de campo (solo en este navegador) ────────────────
+
+export interface MetricaCotizacion {
+  id: string;
+  cliente: string;
+  inicio: number;
+  resultados?: number;
+  documento?: number;
+}
+
+const METRICS_KEY = 'sego_metricas_v1';
+
+export function getMetricas(): Record<string, MetricaCotizacion> {
+  try {
+    return JSON.parse(localStorage.getItem(METRICS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+/** "inicio" se guarda al crear la cotización; resultados/documento solo la primera vez. */
+export function registrarMetrica(
+  id: string | undefined,
+  campo: 'inicio' | 'resultados' | 'documento',
+  extra?: { cliente?: string; ts?: number },
+) {
+  if (!id) return;
+  try {
+    const all = getMetricas();
+    const ts = extra?.ts ?? Date.now();
+    const m: MetricaCotizacion = all[id] ?? { id, cliente: extra?.cliente ?? '', inicio: ts };
+    if (extra?.cliente) m.cliente = extra.cliente;
+    if (campo === 'inicio') m.inicio = ts;
+    else if (m[campo] == null) {
+      if (!all[id]) return; // cotizaciones de ejemplo o anteriores a la medición
+      m[campo] = ts;
+    }
+    all[id] = m;
+    localStorage.setItem(METRICS_KEY, JSON.stringify(all));
+  } catch { /* noop */ }
+}
+
+export function borrarMetricas() {
+  try { localStorage.removeItem(METRICS_KEY); } catch { /* noop */ }
 }

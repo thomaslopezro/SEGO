@@ -9,6 +9,7 @@ import { Documento } from "./pages/sego/Documento";
 import { Cotizaciones } from "./pages/sego/Cotizaciones";
 import { ClienteView } from "./pages/sego/ClienteView";
 import { Landing } from "./pages/sego/Landing";
+import { Metricas } from "./pages/sego/Metricas";
 
 export const router = createBrowserRouter([
   { path: "/", Component: Landing },
@@ -23,6 +24,9 @@ export const router = createBrowserRouter([
 
   // Vista para el cliente final (link compartible)
   { path: "/cliente/:token", Component: ClienteView },
+
+  // Ruta oculta (sin enlace en el menú) para las pruebas de campo
+  { path: "/metricas", Component: Metricas },
 
   { path: "*", loader: () => redirect("/") },
 ]);

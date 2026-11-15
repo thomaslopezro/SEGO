@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { LayoutGrid, PlusCircle, FileText, Users, Settings, HelpCircle, Bell, Menu, ChevronRight, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { C } from './data';
+import { DemoBanner } from './DemoBanner';
 
 interface NavItem {
   label: string;
@@ -63,12 +65,12 @@ export function Layout({ children, breadcrumb }: LayoutProps) {
     return (
       <button
         onClick={() => {
-          if (item.soon) { import('sonner').then(({ toast }) => toast(`"${item.label}" estará disponible próximamente.`, { icon: '🔜' })); return; }
+          if (item.soon) { toast(`"${item.label}" estará disponible próximamente.`, { icon: '🔜' }); return; }
           if (item.path) { navigate(item.path); setMobileOpen(false); }
         }}
         style={{
           display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-          padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+          padding: '8px 12px', minHeight: 40, borderRadius: 8, border: 'none', cursor: 'pointer',
           background: active ? C.sidebarActive : 'transparent',
           color: active ? 'white' : 'rgba(255,255,255,0.55)',
           borderLeft: `3px solid ${active ? C.primary : 'transparent'}`,
@@ -117,7 +119,7 @@ export function Layout({ children, breadcrumb }: LayoutProps) {
   );
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: 'Inter, sans-serif', color: C.text }}>
+    <div className="sego-shell" style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: 'Inter, sans-serif', color: C.text }}>
       {/* Desktop sidebar */}
       <div id="sego-sidebar" style={{ flexShrink: 0, position: 'sticky', top: 0, height: '100vh', overflowY: 'auto' }}>
         <SidebarContent />
@@ -129,7 +131,7 @@ export function Layout({ children, breadcrumb }: LayoutProps) {
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} onClick={() => setMobileOpen(false)} />
           <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, overflowY: 'auto' }}>
             <div style={{ position: 'relative' }}>
-              <button onClick={() => setMobileOpen(false)} style={{ position: 'absolute', top: 16, right: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', zIndex: 1 }}>
+              <button onClick={() => setMobileOpen(false)} aria-label="Cerrar menú" style={{ position: 'absolute', top: 12, right: 8, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', zIndex: 1 }}>
                 <X size={20} />
               </button>
               <SidebarContent />
@@ -140,8 +142,9 @@ export function Layout({ children, breadcrumb }: LayoutProps) {
 
       {/* Main area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        <DemoBanner />
         {/* Topbar */}
-        <header style={{
+        <header id="sego-topbar" style={{
           background: C.white, borderBottom: `1px solid ${C.border}`,
           padding: '0 28px', height: 58, display: 'flex', alignItems: 'center', gap: 10,
           position: 'sticky', top: 0, zIndex: 10, flexShrink: 0,
@@ -149,11 +152,12 @@ export function Layout({ children, breadcrumb }: LayoutProps) {
           <button
             id="sego-mobile-menu"
             onClick={() => setMobileOpen(true)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, padding: 4, display: 'none' }}
+            aria-label="Abrir menú"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, width: 44, height: 44, marginLeft: -10, alignItems: 'center', justifyContent: 'center', display: 'none', flexShrink: 0 }}
           >
             <Menu size={20} />
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.textSec, fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.textSec, fontSize: 13, minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
             {breadcrumb?.map((crumb, i) => (
               <React.Fragment key={i}>
                 {i > 0 && <ChevronRight size={13} style={{ color: C.border }} />}
@@ -166,11 +170,12 @@ export function Layout({ children, breadcrumb }: LayoutProps) {
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
             <button
-              onClick={() => import('sonner').then(({ toast }) => toast('No tienes notificaciones nuevas.'))}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, position: 'relative', padding: 4 }}
+              onClick={() => toast('No tienes notificaciones nuevas.')}
+              aria-label="Notificaciones"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, position: 'relative', padding: 10 }}
             >
               <Bell size={19} />
-              <span style={{ position: 'absolute', top: 3, right: 3, width: 7, height: 7, borderRadius: '50%', background: C.primary, border: `2px solid ${C.white}` }} />
+              <span style={{ position: 'absolute', top: 9, right: 9, width: 7, height: 7, borderRadius: '50%', background: C.primary, border: `2px solid ${C.white}` }} />
             </button>
             <div style={{
               width: 32, height: 32, borderRadius: '50%',
@@ -182,18 +187,19 @@ export function Layout({ children, breadcrumb }: LayoutProps) {
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: '32px 32px', overflowY: 'auto' }}>
+        <main id="sego-main" style={{ flex: 1, padding: '32px 32px', overflowY: 'auto' }}>
           {children}
         </main>
       </div>
 
       <style>{`
-        @media (max-width: 1023px) {
+        @media screen and (max-width: 1023px) {
           #sego-sidebar { display: none !important; }
           #sego-mobile-menu { display: flex !important; }
         }
-        @media (max-width: 640px) {
-          main { padding: 20px 16px !important; }
+        @media screen and (max-width: 640px) {
+          #sego-main { padding: 20px 16px !important; }
+          #sego-topbar { padding: 0 16px !important; }
         }
       `}</style>
     </div>

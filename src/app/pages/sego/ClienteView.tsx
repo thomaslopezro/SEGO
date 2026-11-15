@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Check, Minus, ExternalLink, MessageCircle, X, Send, Bot, ChevronRight, Shield, AlertTriangle, Sparkles } from 'lucide-react';
-import { ASEGURADORAS, Aseguradora, getCurrentQuote, C } from './data';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useParams } from 'react-router';
+import { Check, Minus, MessageCircle, X, Send, Bot, ChevronRight, Shield, AlertTriangle, Sparkles } from 'lucide-react';
+import { Aseguradora, getCurrentQuote, C, cotizarAseguradoras, leerTokenCliente, formatPrecioMensual, VEHICULO_DEMO } from './data';
+import { DemoBanner } from './DemoBanner';
 
 // ─── AI knowledge base ───────────────────────────────────────────────────────
 
@@ -9,7 +11,10 @@ interface AIRule {
   response: string;
 }
 
-const AI_RULES: AIRule[] = [
+function buildRules(list: Aseguradora[], vehiculo: string): AIRule[] {
+  const A = Object.fromEntries(list.map((a) => [a.id, a])) as Record<string, Aseguradora>;
+  const mill = (n: number) => '$' + (n / 1_000_000).toLocaleString('es-CO', { maximumFractionDigits: 2 }) + 'M';
+  return [
   {
     keywords: ['deducible', 'deduc', 'pago inicial', 'pago propio'],
     response: 'El **deducible** es el monto que tú asumes directamente en caso de un siniestro. Por ejemplo, si tu deducible es del 10% con mínimo $1.200.000, y los daños son $4.000.000, tú pagas $1.200.000 y la aseguradora cubre los $2.800.000 restantes. Si el 10% supera el mínimo, aplica el porcentaje. Entre las tres opciones, **Protección Nacional** tiene el deducible mínimo más bajo ($1.000.000).',
@@ -36,11 +41,11 @@ const AI_RULES: AIRule[] = [
   },
   {
     keywords: ['barata', 'barato', 'económica', 'económico', 'precio', 'menor precio', 'más económica', 'menos cara', 'cuesta'],
-    response: '**Seguros Capital** es la opción de menor precio con **$2.150.000/año** (≈$179.000/mes). A cambio, el deducible es más alto (15%) y no incluye vehículo de reemplazo. Si el presupuesto es lo más importante, es la opción a considerar, aunque vale la pena evaluar el mayor desembolso en caso de siniestro.',
+    response: `**Seguros Capital** es la opción de menor precio con **${A.capital.precioStr}/año** (≈${formatPrecioMensual(A.capital.precio)}/mes). A cambio, el deducible es más alto (15%) y no incluye vehículo de reemplazo. Si el presupuesto es lo más importante, es la opción a considerar, aunque vale la pena evaluar el mayor desembolso en caso de siniestro.`,
   },
   {
     keywords: ['completa', 'cobertura completa', 'mejor cobertura', 'más completa', 'todo cubre'],
-    response: '**Protección Nacional** es la opción más completa: incluye el menor deducible mínimo ($1.000.000), vehículo de reemplazo, y la mayor cantidad de asistencias (incluyendo hospedaje de emergencia). Su precio es $2.790.000/año (≈$232.500/mes). Ideal si quieres la mayor tranquilidad posible.',
+    response: `**Protección Nacional** es la opción más completa: incluye el menor deducible mínimo ($1.000.000), vehículo de reemplazo, y la mayor cantidad de asistencias (incluyendo hospedaje de emergencia). Su precio es ${A.proteccion.precioStr}/año (≈${formatPrecioMensual(A.proteccion.precio)}/mes). Ideal si quieres la mayor tranquilidad posible.`,
   },
   {
     keywords: ['recomiend', 'mejor opcion', 'mejor opción', 'cuál elijo', 'cual elijo', 'qué me conviene', 'que me conviene', 'cuál escoger'],
@@ -48,11 +53,11 @@ const AI_RULES: AIRule[] = [
   },
   {
     keywords: ['diferencia', 'diferencias', 'en qué se diferencian', 'comparar', 'comparación'],
-    response: 'Las principales diferencias entre las tres opciones son:\n\n**Precio:** Capital ($2.15M) < Andina ($2.48M) < Protección ($2.79M)\n\n**Deducible mínimo:** Protección ($1.0M) < Andina ($1.2M) < Capital ($1.5M)\n\n**Vehículo de reemplazo:** Andina ✓ y Protección ✓, Capital ✗\n\n**Asistencias:** Protección tiene más servicios incluidos.\n\n¿Quieres que te explique algo específico de alguna opción?',
+    response: `Las principales diferencias entre las tres opciones son:\n\n**Precio:** Capital (${mill(A.capital.precio)}) < Andina (${mill(A.andina.precio)}) < Protección (${mill(A.proteccion.precio)})\n\n**Deducible mínimo:** Protección ($1.0M) < Andina ($1.2M) < Capital ($1.5M)\n\n**Vehículo de reemplazo:** Andina ✓ y Protección ✓, Capital ✗\n\n**Asistencias:** Protección tiene más servicios incluidos.\n\n¿Quieres que te explique algo específico de alguna opción?`,
   },
   {
     keywords: ['pagar', 'pago', 'cómo pago', 'como pago', 'forma de pago', 'pagar seguro'],
-    response: 'Para pagar tu seguro, selecciona la opción que prefieras y haz clic en **"Pagar mi seguro"** en la tarjeta correspondiente. Serás redirigido al portal de pagos oficial de esa aseguradora, donde podrás completar el proceso de forma segura. SEGO no procesa pagos directamente, simplemente te conecta con la aseguradora elegida.',
+    response: 'Cuando elijas una opción, toca **"Elegir este seguro"** en la tarjeta correspondiente y avísale a tu intermediario. En esta versión de prueba no hay pagos reales: las aseguradoras y precios son simulados. SEGO no procesa pagos directamente.',
   },
   {
     keywords: ['soat', 'obligatorio'],
@@ -64,29 +69,30 @@ const AI_RULES: AIRule[] = [
   },
   {
     keywords: ['vigencia', 'duración', 'cuánto tiempo', 'cuanto tiempo', 'año', 'mensual'],
-    response: 'Los precios que ves son **anuales**. La póliza tiene una vigencia de 12 meses y se renueva cada año. El precio mensual equivalente sería:\n- Andina: ≈$206.667/mes\n- Capital: ≈$179.167/mes\n- Protección: ≈$232.500/mes\n\nAlgunas aseguradoras permiten pagar en cuotas. Consulta las condiciones de pago con tu intermediario.',
+    response: `Los precios que ves son **anuales**. La póliza tiene una vigencia de 12 meses y se renueva cada año. El precio mensual equivalente sería:\n- Andina: ≈${formatPrecioMensual(A.andina.precio)}/mes\n- Capital: ≈${formatPrecioMensual(A.capital.precio)}/mes\n- Protección: ≈${formatPrecioMensual(A.proteccion.precio)}/mes\n\nAlgunas aseguradoras permiten pagar en cuotas. Consulta las condiciones de pago con tu intermediario.`,
   },
   {
     keywords: ['hola', 'buenos', 'buenas', 'saludos', 'hey', 'hi'],
-    response: '¡Hola! Soy SEGO IA, tu asistente para entender las opciones de seguro de tu Mazda CX-30. Puedo explicarte coberturas, deducibles, diferencias entre las opciones, o cómo funciona el proceso de pago. ¿Qué te gustaría saber?',
+    response: `¡Hola! Soy SEGO IA, tu asistente para entender las opciones de seguro de tu ${vehiculo}. Puedo explicarte coberturas, deducibles, diferencias entre las opciones, o cómo funciona el proceso de pago. ¿Qué te gustaría saber?`,
   },
   {
     keywords: ['gracias', 'thank', 'ok', 'okay', 'perfecto', 'entendido', 'listo'],
     response: '¡Con gusto! Recuerda que si tienes más dudas sobre tu cotización, aquí estaré. También puedes hablar directamente con el intermediario que preparó esta propuesta. ¿Hay algo más que quieras saber sobre las opciones?',
   },
-];
+  ];
+}
 
 const SUGGESTED_QUESTIONS = [
   '¿Qué es el deducible?',
   '¿Cuál tiene mejor cobertura?',
   '¿Cuál es la diferencia entre las opciones?',
   '¿Cómo funciona el hurto total?',
-  '¿Cómo pago mi seguro?',
+  '¿Cómo elijo y pago?',
 ];
 
-function getAIResponse(input: string): string {
+function getAIResponse(input: string, rules: AIRule[]): string {
   const lower = input.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  for (const rule of AI_RULES) {
+  for (const rule of rules) {
     if (rule.keywords.some((k) => lower.includes(k.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) {
       return rule.response;
     }
@@ -111,7 +117,7 @@ function formatMarkdown(text: string) {
   return <>{parts}</>;
 }
 
-function ChatWidget() {
+function ChatWidget({ rules }: { rules: AIRule[] }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -136,7 +142,7 @@ function ChatWidget() {
     setInput('');
     setTyping(true);
     setTimeout(() => {
-      const response = getAIResponse(text);
+      const response = getAIResponse(text, rules);
       setMessages((m) => [...m, { id: (Date.now() + 1).toString(), role: 'ai', text: response, ts: new Date() }]);
       setTyping(false);
     }, 900 + Math.random() * 600);
@@ -181,13 +187,13 @@ function ChatWidget() {
               <Bot size={19} color="white" />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>SEGO IA</div>
+              <div style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>SEGO IA <span style={{ fontWeight: 400, opacity: 0.7, fontSize: 11 }}>(respuestas automáticas)</span></div>
               <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D399', display: 'inline-block' }} />
                 Responde preguntas sobre tu cotización
               </div>
             </div>
-            <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', padding: 4 }}>
+            <button onClick={() => setOpen(false)} aria-label="Cerrar chat" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.7)', padding: 10 }}>
               <X size={18} />
             </button>
           </div>
@@ -231,7 +237,7 @@ function ChatWidget() {
             <div style={{ padding: '0 12px 10px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {SUGGESTED_QUESTIONS.map((q) => (
                 <button key={q} onClick={() => sendMessage(q)} style={{
-                  padding: '5px 11px', borderRadius: 14, border: `1.5px solid ${C.border}`,
+                  padding: '8px 12px', borderRadius: 14, border: `1.5px solid ${C.border}`,
                   background: 'white', color: C.textSec, fontSize: 12, cursor: 'pointer',
                   fontFamily: 'Inter, sans-serif', transition: 'all 0.15s',
                 }}
@@ -253,7 +259,7 @@ function ChatWidget() {
               placeholder="Escribe tu pregunta…"
               style={{
                 flex: 1, padding: '9px 13px', borderRadius: 12, border: `1.5px solid ${C.border}`,
-                fontSize: 13.5, color: C.text, outline: 'none', fontFamily: 'Inter, sans-serif',
+                fontSize: 16, color: C.text, outline: 'none', fontFamily: 'Inter, sans-serif', minWidth: 0,
                 background: '#FAFAFA', transition: 'border-color 0.15s',
               }}
               onFocus={(e) => e.target.style.borderColor = C.primary}
@@ -263,7 +269,7 @@ function ChatWidget() {
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || typing}
               style={{
-                width: 38, height: 38, borderRadius: 12, border: 'none',
+                width: 44, height: 44, borderRadius: 12, border: 'none',
                 background: input.trim() && !typing ? C.primary : C.border,
                 color: 'white', cursor: input.trim() && !typing ? 'pointer' : 'not-allowed',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
@@ -289,50 +295,46 @@ function ChatWidget() {
   );
 }
 
-// ─── Payment redirect modal ───────────────────────────────────────────────────
-
-const PAYMENT_URLS: Record<string, string> = {
-  andina: 'https://www.aseguradoraandina.com/pago-en-linea',
-  capital: 'https://www.seguroscapital.com.co/pago',
-  proteccion: 'https://www.proteccionnacional.com.co/pago',
-};
+// ─── Payment modal (simulado: las aseguradoras son ficticias) ────────────────
 
 function PayModal({ aseg, onClose }: { aseg: Aseguradora; onClose: () => void }) {
+  const [done, setDone] = useState(false);
   function handleGo() {
-    window.open(PAYMENT_URLS[aseg.id] ?? 'https://google.com', '_blank');
-    onClose();
+    setDone(true);
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: 'Inter, sans-serif' }} onClick={onClose}>
-      <div style={{ background: 'white', borderRadius: 18, maxWidth: 440, width: '100%', padding: '32px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ background: 'white', borderRadius: 18, maxWidth: 440, width: '100%', padding: '26px 22px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ width: 52, height: 52, borderRadius: 14, background: aseg.badgeBg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
           <Shield size={24} color={aseg.badgeColor} />
         </div>
         <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: '0 0 10px', fontFamily: 'Manrope, sans-serif' }}>
-          Pagar con {aseg.nombre}
+          {done ? '¡Listo! Avísale a tu intermediario' : `Elegir ${aseg.nombre}`}
         </h3>
         <p style={{ fontSize: 14, color: C.textSec, lineHeight: 1.6, margin: '0 0 20px' }}>
-          Serás redirigido al portal de pagos oficial de <strong style={{ color: C.text }}>{aseg.nombre}</strong>. El proceso de pago es gestionado directamente por la aseguradora. SEGO no almacena ni procesa información de pago.
+          {done
+            ? <>Elegiste <strong style={{ color: C.text }}>{aseg.nombre}</strong> por {aseg.precioStr}/año. Comunícale tu elección al intermediario que te envió esta propuesta.</>
+            : <>Con aseguradoras reales, aquí serías redirigido al portal de pagos oficial de <strong style={{ color: C.text }}>{aseg.nombre}</strong>. SEGO no almacena ni procesa información de pago.</>}
         </p>
         <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 14px', marginBottom: 22, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
           <AlertTriangle size={16} color="#D97706" style={{ marginTop: 1, flexShrink: 0 }} />
           <p style={{ fontSize: 12.5, color: '#92400E', margin: 0, lineHeight: 1.5 }}>
-            Asegúrate de tener a mano tu número de documento y los datos del vehículo antes de continuar.
+            Versión de prueba: esta aseguradora y su precio son simulados. No se realizará ningún pago.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: 'white', color: C.text, fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
-            Cancelar
+            {done ? 'Cerrar' : 'Cancelar'}
           </button>
-          <button onClick={handleGo} style={{
+          {!done && <button onClick={handleGo} style={{
             flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
             padding: '12px', borderRadius: 10, border: 'none',
             background: aseg.color, color: 'white', fontSize: 14, fontWeight: 700,
             cursor: 'pointer', fontFamily: 'Inter, sans-serif',
           }}>
-            Ir al portal de pagos <ExternalLink size={14} />
-          </button>
+            Confirmar elección <Check size={15} />
+          </button>}
         </div>
       </div>
     </div>
@@ -378,7 +380,7 @@ function ClienteQuoteCard({ a, onPay }: { a: Aseguradora; onPay: (a: Aseguradora
           {a.precioStr}
         </div>
         <div style={{ fontSize: 13, color: C.textSec, marginTop: 5 }}>
-          ≈ ${Math.round(a.precio / 12).toLocaleString('es-CO')} / mes
+          ≈ {formatPrecioMensual(a.precio)} / mes
         </div>
       </div>
 
@@ -421,7 +423,7 @@ function ClienteQuoteCard({ a, onPay }: { a: Aseguradora; onPay: (a: Aseguradora
         onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; e.currentTarget.style.boxShadow = `0 4px 18px ${a.color}60`; }}
         onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.boxShadow = `0 2px 10px ${a.color}40`; }}
       >
-        Pagar mi seguro <ChevronRight size={17} />
+        Elegir este seguro <ChevronRight size={17} />
       </button>
     </div>
   );
@@ -430,21 +432,34 @@ function ClienteQuoteCard({ a, onPay }: { a: Aseguradora; onPay: (a: Aseguradora
 // ─── Main ClienteView ─────────────────────────────────────────────────────────
 
 export function ClienteView() {
+  const { token } = useParams<{ token: string }>();
   const [payModal, setPayModal] = useState<Aseguradora | null>(null);
-  const quoteData = getCurrentQuote();
-  const clientName = quoteData.cliente?.nombre ?? 'Laura Gómez';
-  const vehicleStr = quoteData.vehiculo
-    ? `${quoteData.vehiculo.marca} ${quoteData.vehiculo.linea} ${quoteData.vehiculo.modelo ?? ''} ${quoteData.vehiculo.anio}`
-    : 'Mazda CX-30 Grand Touring 2024';
-  const ciudad = quoteData.vehiculo?.ciudad ?? 'Bogotá';
+  // Los datos vienen en el link (el cliente lo abre en su propio celular).
+  // Si el token no es válido, se usa la cotización abierta en este navegador o el ejemplo.
+  const { clientName, veh, ASEGURADORAS } = useMemo(() => {
+    const fromToken = leerTokenCliente(token);
+    if (fromToken) {
+      return { clientName: fromToken.n, veh: { ...VEHICULO_DEMO, ...fromToken.v }, ASEGURADORAS: cotizarAseguradoras(undefined, fromToken.p) };
+    }
+    const q = getCurrentQuote();
+    return {
+      clientName: q.cliente?.nombre ?? 'Laura Gómez',
+      veh: q.vehiculo ?? VEHICULO_DEMO,
+      ASEGURADORAS: cotizarAseguradoras(q.vehiculo, q.precios),
+    };
+  }, [token]);
+  const vehicleStr = `${veh.marca} ${veh.linea} ${veh.modelo ?? ''} ${veh.anio}`.replace(/\s+/g, ' ').trim();
+  const ciudad = veh.ciudad;
+  const rules = useMemo(() => buildRules(ASEGURADORAS, `${veh.marca} ${veh.linea}`), [ASEGURADORAS, veh]);
   const today = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: 'Inter, sans-serif', color: C.text }}>
       {payModal && <PayModal aseg={payModal} onClose={() => setPayModal(null)} />}
+      <DemoBanner />
 
       {/* Top bar */}
-      <header style={{ background: 'white', borderBottom: `1px solid ${C.border}`, padding: '14px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10 }}>
+      <header style={{ background: 'white', borderBottom: `1px solid ${C.border}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <div style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(135deg, #6B5FE8, #5447D8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
@@ -462,11 +477,11 @@ export function ClienteView() {
       </header>
 
       {/* Hero section */}
-      <div style={{ background: 'linear-gradient(160deg, #272143 0%, #3D2F8F 60%, #5447D8 100%)', padding: '52px 32px', textAlign: 'center' }}>
+      <div style={{ background: 'linear-gradient(160deg, #272143 0%, #3D2F8F 60%, #5447D8 100%)', padding: '44px 20px', textAlign: 'center' }}>
         <div style={{ display: 'inline-block', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 20, padding: '5px 16px', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.8)', letterSpacing: '0.05em', marginBottom: 18 }}>
           COTIZACIÓN PERSONALIZADA
         </div>
-        <h1 style={{ fontSize: 34, fontWeight: 800, color: 'white', margin: '0 0 12px', letterSpacing: '-0.03em', fontFamily: 'Manrope, sans-serif' }}>
+        <h1 style={{ fontSize: 'clamp(26px, 6vw, 34px)', fontWeight: 800, color: 'white', margin: '0 0 12px', letterSpacing: '-0.03em', fontFamily: 'Manrope, sans-serif' }}>
           Opciones de seguro para {clientName.split(' ')[0]}
         </h1>
         <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 16, margin: '0 0 6px' }}>
@@ -474,9 +489,9 @@ export function ClienteView() {
         </p>
         <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Cotización válida al {today}</p>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 28, marginTop: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px 28px', marginTop: 32, flexWrap: 'wrap' }}>
           {[
-            { value: '3', label: 'aseguradoras consultadas' },
+            { value: '3', label: 'aseguradoras (simuladas)' },
             { value: '< 12 min', label: 'tiempo de cotización' },
             { value: '100%', label: 'gratis para el cliente' },
           ].map((stat) => (
@@ -489,13 +504,13 @@ export function ClienteView() {
       </div>
 
       {/* Cards */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '40px 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 16px 96px' }}>
         <div style={{ marginBottom: 28 }}>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: '0 0 6px', fontFamily: 'Manrope, sans-serif' }}>
             Encontramos 3 opciones para ti
           </h2>
           <p style={{ color: C.textSec, fontSize: 14, margin: 0 }}>
-            Selecciona la que mejor se ajuste a tus necesidades y haz clic en <strong>"Pagar mi seguro"</strong> para continuar.
+            Revisa la que mejor se ajuste a tus necesidades y toca <strong>"Elegir este seguro"</strong> para continuar.
           </p>
         </div>
 
@@ -506,7 +521,7 @@ export function ClienteView() {
         </div>
 
         {/* Simple explanation section */}
-        <div style={{ marginTop: 40, background: 'white', borderRadius: 16, border: `1px solid ${C.border}`, padding: '28px 32px' }}>
+        <div style={{ marginTop: 40, background: 'white', borderRadius: 16, border: `1px solid ${C.border}`, padding: '24px 20px' }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: '0 0 20px', fontFamily: 'Manrope, sans-serif' }}>
             ¿Cómo funciona un seguro de vehículo?
           </h3>
@@ -530,7 +545,7 @@ export function ClienteView() {
         {/* Disclaimer */}
         <div style={{ marginTop: 20, padding: '14px 18px', background: C.bg, borderRadius: 10, border: `1px solid ${C.border}` }}>
           <p style={{ fontSize: 12, color: C.textSec, margin: 0, lineHeight: 1.6 }}>
-            <strong style={{ color: C.text }}>Información importante:</strong> Las condiciones, exclusiones y límites de cobertura deben verificarse en los documentos condicionados de cada aseguradora. Esta propuesta fue generada por un intermediario de seguros autorizado y tiene carácter informativo. No sustituye los términos contractuales de cada póliza. Los pagos son procesados exclusivamente por cada aseguradora.
+            <strong style={{ color: C.text }}>Información importante:</strong> Versión de prueba: aseguradoras y precios simulados, no son ofertas reales. Las condiciones, exclusiones y límites de cobertura deben verificarse en los documentos condicionados de cada aseguradora. Esta propuesta fue generada por un intermediario de seguros autorizado y tiene carácter informativo. No sustituye los términos contractuales de cada póliza. Los pagos son procesados exclusivamente por cada aseguradora.
           </p>
         </div>
 
@@ -541,7 +556,7 @@ export function ClienteView() {
         </div>
       </div>
 
-      <ChatWidget />
+      <ChatWidget rules={rules} />
 
       <style>{`
         @media (max-width: 768px) {

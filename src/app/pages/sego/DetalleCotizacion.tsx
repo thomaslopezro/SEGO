@@ -1,14 +1,15 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Check, X, Info, FileText, PlusSquare, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { Layout } from './Layout';
-import { C, ASEGURADORAS, formatPrecioMensual } from './data';
+import { C, cotizarAseguradoras, getCurrentQuote, formatPrecioMensual } from './data';
 
 export function DetalleCotizacion() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const aseg = ASEGURADORAS.find((a) => a.id === id) ?? ASEGURADORAS[0];
+  const aseguradoras = useMemo(() => { const q = getCurrentQuote(); return cotizarAseguradoras(q.vehiculo, q.precios); }, []);
+  const aseg = aseguradoras.find((a) => a.id === id) ?? aseguradoras[0];
 
   const cob = aseg.coberturas;
   const cobItems = [
@@ -21,7 +22,7 @@ export function DetalleCotizacion() {
 
   function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-      <div style={{ background: 'white', borderRadius: 14, border: `1px solid ${C.border}`, padding: '22px 26px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div className="sego-card-pad" style={{ background: 'white', borderRadius: 14, border: `1px solid ${C.border}`, padding: '22px 26px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
         <h3 style={{ fontSize: 14.5, fontWeight: 600, color: C.text, margin: '0 0 18px' }}>{title}</h3>
         {children}
       </div>
@@ -33,16 +34,16 @@ export function DetalleCotizacion() {
       {/* Back */}
       <button
         onClick={() => navigate('/cotizaciones/resultados')}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, fontSize: 13, marginBottom: 20, padding: 0 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: C.textSec, fontSize: 13, marginBottom: 10, padding: '10px 0' }}
       >
         <ArrowLeft size={15} /> Volver al comparador
       </button>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
+      <div className="sego-detail-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 24, alignItems: 'start' }}>
         {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Hero card */}
-          <div style={{ background: 'white', borderRadius: 14, border: `2px solid ${aseg.color}30`, padding: '28px 28px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+          <div className="sego-card-pad" style={{ background: 'white', borderRadius: 14, border: `2px solid ${aseg.color}30`, padding: '28px 28px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ width: 52, height: 52, borderRadius: 13, background: aseg.color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${aseg.color}25` }}>
@@ -55,7 +56,7 @@ export function DetalleCotizacion() {
                   </span>
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
+              <div>
                 <div style={{ fontSize: 34, fontWeight: 800, color: C.text, letterSpacing: '-0.03em', fontFamily: 'Manrope, sans-serif', lineHeight: 1 }}>{aseg.precioStr}</div>
                 <div style={{ fontSize: 13, color: C.textSec, marginTop: 4 }}>/ año · {formatPrecioMensual(aseg.precio)} / mes</div>
               </div>
@@ -121,25 +122,25 @@ export function DetalleCotizacion() {
         </div>
 
         {/* Right sticky column */}
-        <div style={{ position: 'sticky', top: 80, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="sego-detail-aside" style={{ position: 'sticky', top: 80, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ background: 'white', borderRadius: 14, border: `1px solid ${C.border}`, padding: '22px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 16px' }}>Acciones</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button
                 onClick={() => navigate('/cotizaciones/documento')}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderRadius: 10, border: 'none', background: C.primary, color: 'white', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', borderRadius: 10, border: 'none', background: C.primary, color: 'white', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
               >
                 <FileText size={15} /> Generar documento
               </button>
               <button
-                onClick={() => toast.success('Esta opción ha sido agregada a tu comparación.')}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: 'white', color: C.text, fontSize: 13.5, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
+                onClick={() => { toast.success('Opción seleccionada. Marca otra para compararlas.'); navigate('/cotizaciones/resultados', { state: { select: aseg.id } }); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: 'white', color: C.text, fontSize: 13.5, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
               >
                 <PlusSquare size={15} /> Agregar a comparación
               </button>
               <button
-                onClick={() => toast.info('El condicionado completo está disponible en el portal de ' + aseg.nombre + '.')}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: 'white', color: C.textSec, fontSize: 13.5, fontWeight: 400, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
+                onClick={() => toast.info('Versión de prueba: ' + aseg.nombre + ' es una aseguradora ficticia y no tiene condicionado. Con aseguradoras reales aquí se abrirá el documento oficial.', { duration: 6000 })}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 16px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: 'white', color: C.textSec, fontSize: 13.5, fontWeight: 400, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
               >
                 Ver condicionado
               </button>
@@ -155,12 +156,6 @@ export function DetalleCotizacion() {
         </div>
       </div>
 
-      <style>{`
-        @media (max-width: 900px) {
-          div[style*="gridTemplateColumns"] { grid-template-columns: 1fr !important; }
-          div[style*="position: sticky"] { position: static !important; }
-        }
-      `}</style>
     </Layout>
   );
 }
